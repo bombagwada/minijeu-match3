@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeu Match‑3 (Prototype sans librairie)</title>
+  <style>
+    body {
+      background: #222;
+      color: #fff;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      margin-top: 20px;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 50px);
+      grid-template-rows: repeat(8, 50px);
+      gap: 4px;
+      margin-top: 20px;
+    }
+    .cell {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      box-sizing: border-box;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .cell.selected {
+      outline: 3px solid #fff;
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Prototype Match‑3</h1>
+  <p>Cliquez sur une gemme puis sur une gemme adjacente pour les échanger. Formez des lignes ou colonnes de 3 pour les faire disparaître.</p>
+  <div id="board"></div>
+
+  <script>
+    // Définition des couleurs pour les gemmes (en hexadécimal CSS)
+    const gemColors = [
+      '#FF5F5F', // rouge
+      '#5FCBFF', // bleu
+      '#5FFF9E', // vert
+      '#F3FF5F', // jaune
+      '#FF9EFF', // magenta
+      '#FFA55F'  // orange
+    ];
+
+    /*
+     * Classe Match3 inspirée du tutoriel d'Emanuele Feronato. Cette version
+     * fonctionne sans moteur externe et gère la logique du plateau : création
+     * d'une grille sans combinaisons initiales, échanges, détection de
+     * combinaisons, suppression des gemmes, chute et réapprovisionnement.
+     */
+    class Match3 {
+      constructor(obj) {
+        this.rows = obj.rows;
+        this.columns = obj.columns;
+        this.items = obj.items;
+      }
+      generateField() {
+        this.gameArray = [];
+        this.selectedItem = false;
+        for (let i = 0; i < this.rows; i++) {
+          this.gameArray[i] = [];
+          for (let j = 0; j < this.columns; j++) {
+            do {
+              let randomValue = Math.floor(Math.random() * this.items);
+              this.gameArray[i][j] = {
+                value: randomValue,
+                isEmpty: false,
+                row: i,
+                column: j
+              };
+            } while (this.isPartOfMatch(i, j));
+          }
+        }
+      }
+      isPartOfMatch(row, column) {
+        return this.isPartOfHorizontalMatch(row, column) || this.isPartOfVerticalMatch(row, column);
+      }
+      isPartOfHorizontalMatch(row, column) {
+        return (
+          this.valueAt(row, column) === this.valueAt(row, column - 1) &&
+          this.valueAt(row, column) === this.valueAt(row, column - 2)
+        ) || (
+          this.valueAt(row, column) === this.valueAt(row, column + 1) &&
+          this.valueAt(row, column) === this.valueAt(row, column + 2)
+        ) || (
+          this.valueAt(row, column) === this.valueAt(row, column - 1) &&
+          this.valueAt(row, column) === this.valueAt(row, column + 1)
+        );
+      }
+      isPartOfVerticalMatch(row, column) {
+        return (
+          this.valueAt(row, column) === this.valueAt(row - 1, column) &&
+          this.valueAt(row, column) === this.valueAt(row - 2, column)
+        ) || (
+          this.valueAt(row, column) === this.valueAt(row + 1, column) &&
+          this.valueAt(row, column) === this.valueAt(row + 2, column)
+        ) || (
+          this.valueAt(row, column) === this.valueAt(row - 1, column) &&
+          this.valueAt(row, column) === this.valueAt(row + 1, column)
+        );
+      }
+      valueAt(row, column) {
+        if (!this.validPick(row, column)) {
+          return false;
+        }
+        return this.gameArray[row][column].value;
+      }
+      validPick(row, column) {
+        return row >= 0 && row < this.rows && column >= 0 && column < this.columns;
+      }
+      getRows() {
+        return this.rows;
+      }
+      getColumns() {
+        return this.columns;
+      }
+      setCustomData(row, column, customData) {
+        this.gameArray[row][column].customData = customData;
+      }
+      customDataOf(row, column) {
+        return this.gameArray[row][column].customData;
+      }
+      getSelectedItem() {
+        return this.selectedItem;
+      }
+      setSelectedItem(row, column) {
+        this.selectedItem = { row: row, column: column };
+      }
+      deleselectItem() {
+        this.selectedItem = false;
+      }
+      areTheSame(row, column, row2, column2) {
+        return row === row2 && column === column2;
+      }
+      areNext(row, column, row2, column2) {
+        return Math.abs(row - row2) + Math.abs(column - column2) === 1;
+      }
+      swapItems(row, column, row2, column2) {
+        let tempObject = Object.assign({}, this.gameArray[row][column]);
+        this.gameArray[row][column] = Object.assign({}, this.gameArray[row2][column2]);
+        this.gameArray[row2][column2] = tempObject;
+        return [
+          {
+            row: row,
+            column: column,
+            deltaRow: row - row2,
+            deltaColumn: column - column2
+          },
+          {
+            row: row2,
+            column: column2,
+            deltaRow: row2 - row,
+            deltaColumn: column2 - column
+          }
+        ];
+      }
+      getMatchList() {
+        let matches = [];
+        for (let i = 0; i < this.rows; i++) {
+          for (let j = 0; j < this.columns; j++) {
+            if (this.isPartOfMatch(i, j)) {
+              matches.push({ row: i, column: j });
+            }
+          }
+        }
+        return matches;
+      }
+      removeMatches() {
+        let matches = this.getMatchList();
+        matches.forEach(
+          function(item) {
+            this.setEmpty(item.row, item.column);
+          }.bind(this)
+        );
+      }
+      setEmpty(row, column) {
+        this.gameArray[row][column].isEmpty = true;
+      }
+      isEmpty(row, column) {
+        return this.gameArray[row][column].isEmpty;
+      }
+      emptySpacesBelow(row, column) {
+        let result = 0;
+        if (row !== this.rows) {
+          for (let i = row + 1; i < this.rows; i++) {
+            if (this.isEmpty(i, column)) {
+              result++;
+            }
+          }
+        }
+        return result;
+      }
+      arrangeBoardAfterMatch() {
+        let result = [];
+        for (let i = this.rows - 2; i >= 0; i--) {
+          for (let j = 0; j < this.columns; j++) {
+            let emptySpaces = this.emptySpacesBelow(i, j);
+            if (!this.isEmpty(i, j) && emptySpaces > 0) {
+              this.swapItems(i, j, i + emptySpaces, j);
+              result.push({
+                row: i + emptySpaces,
+                column: j,
+                deltaRow: emptySpaces,
+                deltaColumn: 0
+              });
+            }
+          }
+        }
+        return result;
+      }
+      replenishBoard() {
+        let result = [];
+        for (let i = 0; i < this.columns; i++) {
+          if (this.isEmpty(0, i)) {
+            let emptySpaces = this.emptySpacesBelow(0, i) + 1;
+            for (let j = 0; j < emptySpaces; j++) {
+              let randomValue = Math.floor(Math.random() * this.items);
+              result.push({
+                row: j,
+                column: i,
+                deltaRow: emptySpaces,
+                deltaColumn: 0
+              });
+              this.gameArray[j][i].value = randomValue;
+              this.gameArray[j][i].isEmpty = false;
+            }
+          }
+        }
+        return result;
+      }
+    }
+
+    // Initialisation du plateau
+    const boardElement = document.getElementById('board');
+    const match3 = new Match3({ rows: 8, columns: 8, items: gemColors.length });
+    match3.generateField();
+
+    let selected = null;
+
+    // Dessine l'ensemble de la grille en utilisant les valeurs actuelles de match3
+    function renderBoard() {
+      boardElement.innerHTML = '';
+      for (let i = 0; i < match3.getRows(); i++) {
+        for (let j = 0; j < match3.getColumns(); j++) {
+          const cell = document.createElement('div');
+          cell.classList.add('cell');
+          cell.style.backgroundColor = gemColors[match3.valueAt(i, j)];
+          cell.dataset.row = i;
+          cell.dataset.col = j;
+          if (selected && selected.row === i && selected.col === j) {
+            cell.classList.add('selected');
+          }
+          cell.addEventListener('click', handleCellClick);
+          boardElement.appendChild(cell);
+        }
+      }
+    }
+
+    // Gestion des clics sur chaque gemme
+    function handleCellClick(event) {
+      const row = parseInt(this.dataset.row);
+      const col = parseInt(this.dataset.col);
+      if (!selected) {
+          // Sélectionner la première gemme
+          selected = { row, col };
+          renderBoard();
+          return;
+      }
+      // Si on clique à nouveau sur la même gemme, on annule la sélection
+      if (selected.row === row && selected.col === col) {
+        selected = null;
+        renderBoard();
+        return;
+      }
+      // Si les deux gemmes ne sont pas adjacentes, on sélectionne la nouvelle
+      if (!match3.areNext(row, col, selected.row, selected.col)) {
+        selected = { row, col };
+        renderBoard();
+        return;
+      }
+      // Échanger les gemmes adjacentes
+      match3.swapItems(row, col, selected.row, selected.col);
+      if (match3.matchInBoard()) {
+        // Si l'échange crée une combinaison, procéder à la suppression et à la chute
+        updateAfterMatch(() => {
+          selected = null;
+          renderBoard();
+        });
+      } else {
+        // Pas de combinaison : on annule l'échange
+        match3.swapItems(row, col, selected.row, selected.col);
+        selected = null;
+        renderBoard();
+      }
+    }
+
+    // Appliquer les suppressions et réapprovisionnements jusqu'à ce qu'il n'y ait plus de combinaisons
+    function updateAfterMatch(callback) {
+      match3.removeMatches();
+      match3.arrangeBoardAfterMatch();
+      match3.replenishBoard();
+      // S'il y a encore des combinaisons, on continue après une courte pause
+      if (match3.matchInBoard()) {
+        setTimeout(() => updateAfterMatch(callback), 200);
+      } else {
+        callback();
+      }
+    }
+
+    // Dessine le plateau pour la première fois
+    renderBoard();
+  </script>
+</body>
+</html>
